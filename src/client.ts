@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { type PipeErrorResponse, eventIngestReponseData, pipeResponseWithoutData } from "./util";
+import {
+  type PipeErrorResponse,
+  eventIngestReponseData,
+  pipeResponseWithoutData,
+} from "./util";
 
 export type Config = {
   baseUrl?: string;
@@ -64,7 +68,10 @@ export class Tinybird {
     }
   }
 
-  public buildPipe<TParameters extends z.ZodSchema<any>, TData extends z.ZodSchema<any>>(req: {
+  public buildPipe<
+    TParameters extends z.ZodSchema<any>,
+    TData extends z.ZodSchema<any>,
+  >(req: {
     pipe: string;
     parameters?: TParameters;
     data: TData;
@@ -79,8 +86,14 @@ export class Tinybird {
     };
   }): (
     params: z.input<TParameters>,
-  ) => Promise<z.infer<typeof pipeResponseWithoutData> & { data: z.output<TData>[] }> {
-    const outputSchema = pipeResponseWithoutData.setKey("data", z.array(req.data));
+  ) => Promise<
+    z.infer<typeof pipeResponseWithoutData> & { data: z.output<TData>[] }
+  > {
+    const outputSchema = pipeResponseWithoutData.extend(
+      z.object({
+        data: z.array(req.data),
+      }),
+    );
     return async (params: z.input<TParameters>) => {
       let validatedParams: z.input<TParameters> | undefined = undefined;
       if (req.parameters) {
@@ -112,7 +125,9 @@ export class Tinybird {
         throw new Error(validatedResponse.error.message);
       }
 
-      return validatedResponse.data;
+      return validatedResponse.data as any as z.infer<
+        typeof pipeResponseWithoutData
+      > & { data: z.output<TData>[] };
     };
   }
 
@@ -124,7 +139,8 @@ export class Tinybird {
     events: z.input<TSchema> | z.input<TSchema>[],
   ) => Promise<z.infer<typeof eventIngestReponseData>> {
     return async (events: z.input<TSchema> | z.input<TSchema>[]) => {
-      let validatedEvents: z.output<TSchema> | z.output<TSchema>[] | undefined = undefined;
+      let validatedEvents: z.output<TSchema> | z.output<TSchema>[] | undefined =
+        undefined;
       if (req.event) {
         const v = Array.isArray(events)
           ? req.event.array().safeParse(events)
@@ -137,7 +153,9 @@ export class Tinybird {
 
       if (this.noop) {
         return {
-          successful_rows: Array.isArray(validatedEvents) ? validatedEvents.length : 1,
+          successful_rows: Array.isArray(validatedEvents)
+            ? validatedEvents.length
+            : 1,
           quarantined_rows: 0,
         };
       }
@@ -148,16 +166,23 @@ export class Tinybird {
         url.searchParams.set("wait", "true");
       }
 
-      const body = (Array.isArray(validatedEvents) ? validatedEvents : [validatedEvents])
+      const body = (
+        Array.isArray(validatedEvents) ? validatedEvents : [validatedEvents]
+      )
         .map((p) => JSON.stringify(p))
         .join("\n");
 
       const res = await this.fetch(url, {
         method: "POST",
         body,
-        headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          "Content-Type": "application/json",
+        },
       }).catch((err) => {
-        throw new Error(`Unable to ingest to ${req.datasource}: ${err.message}`);
+        throw new Error(
+          `Unable to ingest to ${req.datasource}: ${err.message}`,
+        );
       });
 
       const validatedResponse = eventIngestReponseData.safeParse(res);
