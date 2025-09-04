@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v4";
 import {
   type PipeErrorResponse,
   eventIngestReponseData,
@@ -89,11 +89,10 @@ export class Tinybird {
   ) => Promise<
     z.infer<typeof pipeResponseWithoutData> & { data: z.output<TData>[] }
   > {
-    const outputSchema = pipeResponseWithoutData.extend(
-      z.object({
-        data: z.array(req.data),
-      }),
-    );
+    const outputSchema = z.object({
+      ...pipeResponseWithoutData.shape,
+      data: z.array(req.data),
+    });
     return async (params: z.input<TParameters>) => {
       let validatedParams: z.input<TParameters> | undefined = undefined;
       if (req.parameters) {
@@ -125,9 +124,7 @@ export class Tinybird {
         throw new Error(validatedResponse.error.message);
       }
 
-      return validatedResponse.data as any as z.infer<
-        typeof pipeResponseWithoutData
-      > & { data: z.output<TData>[] };
+      return validatedResponse.data;
     };
   }
 
